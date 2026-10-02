@@ -93,6 +93,18 @@ Proof.
 Qed.
 Set Printing Depth 1000.
 
+Lemma isList_spec (hd td n: loc) ys v' :
+  isList hd td ys -∗ td ↦ v'  -∗ (td +ₗ 1) ↦ SOMEV #n -∗ 
+  isList hd n (ys ++ [v']).
+Proof.
+  induction ys in hd |- *.    
+  -iIntros "HL HT HTP". simpl.
+  iExists n. iDestruct "HL" as %Heq. rewrite Heq. iFrame. iPureIntro. reflexivity.
+  -iIntros "HL HT HTP". simpl.
+  iDestruct "HL" as (n0) "[HD HDN]". iFrame.
+  iDestruct "HDN" as "[HDN HDL]". iExists n0. iFrame. iApply (IHys n0 with "HDL HT HTP").
+ Qed. 
+
 Lemma queue_spec (v : val) (head tail : loc) (xs : list val):
 {{{ isQueue head tail xs }}}
  enq v (#head, #tail)
@@ -127,19 +139,13 @@ Lemma queue_spec (v : val) (head tail : loc) (xs : list val):
   iExists hd, n, d, v, (ys ++ [v']).
   iDestruct "Hn" as "[Hl0 Hl1]".
   iFrame.
+  iSplit.
+   + iApply (isList_spec hd td n ys v' with "Hlist Htd Htd1").
+   + iPureIntro. rewrite <- Hxs. reflexivity.
+   + reflexivity.
+ Qed.
 
- Admitted.
 
 
-Lemma isList_spec (hd td n: loc) ys v' :
-  isList hd td ys -∗ td ↦ v'  -∗ (td +ₗ 1) ↦ SOMEV #n -∗ 
-  isList hd n (ys ++ [v']).
-Proof.
-  induction ys in hd |- *.    
-  -iIntros "HL HT HTP". simpl.
-  iExists n. iDestruct "HL" as %Heq. rewrite Heq. iFrame. iPureIntro. reflexivity.
-  -iIntros "HL HT HTP". simpl. iExists hd.
-  iDestruct "HL" as (n0) "[HD HDN]". iFrame.
-  iDestruct "HDN" as "[HDN HDL]".  
   
 End UnboundedQueue.
