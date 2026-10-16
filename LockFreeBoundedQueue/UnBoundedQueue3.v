@@ -24,16 +24,16 @@ Definition queue : val :=
 Fixpoint isList (from to : loc) (ys : list val) : iProp Σ :=
   match ys with
   | [] => ⌜from = to⌝
-  | y :: ys => ∃ n : loc, from ↦ y ∗ (from +ₗ 1) ↦ SOMEV #n ∗ isList n to ys
+  | y :: ys => ∃ n : loc, from ↦□ y ∗ (from +ₗ 1) ↦□ SOMEV #n ∗ isList n to ys
   end.
 
-Definition queueInv (head tail : loc) (γ : gname) : iProp Σ :=
+Definition queueInv (head tail : loc) (γ: gname) : iProp Σ :=
   ∃ (hd td l : loc) (d lv : val) (ys zs xs : list val),
     head ↦ #hd ∗ tail ↦ #td ∗
     isList hd td ys ∗          
-    isList td l zs ∗           
-    l ↦□ lv ∗                  
-    (l +ₗ 1) ↦ NONEV ∗         
+    isList td l zs ∗            
+    l ↦□ lv ∗
+    (l +ₗ 1) ↦ NONEV ∗ 
     ⌜d :: xs = ys ++ zs ++ [lv]⌝ ∗
     own γ (●E (xs : leibnizO (list val))).
 Definition isQueue (head tail : loc) (γ : gname) (xs : list val) : iProp Σ :=
@@ -104,7 +104,7 @@ Qed.
 Set Printing Depth 1000.
 
 Lemma isList_spec (hd td n: loc) ys v' :
-  isList hd td ys -∗ td ↦ v'  -∗ (td +ₗ 1) ↦ SOMEV #n -∗ 
+  isList hd td ys -∗ td ↦□ v'  -∗ (td +ₗ 1) ↦□ SOMEV #n -∗ 
   isList hd n (ys ++ [v']).
 Proof.
   induction ys in hd |- *.    
@@ -132,9 +132,25 @@ Lemma queue_spec (v : val) (head tail : loc) (γ : gname) (xs : list val):
   wp_pures.
   iDestruct "HQ" as "[#Hinv Hfrag]".
   wp_bind (! #tail)%E.
-  iInv "Hinv" as "Hienq " "Hiclose".
+  unfold queueInv.
 
+  iInv "Hinv" as (hd td l d lv ys zs xs0) "(Hhead & Htail & Hys & Hzs & Hl & Hl2  & >Hdxs & Hγ)" "Hiclose".
+  wp_load.
+  
+  iMod ("Hiclose" with "[Hhead Htail Hys Hdxs Hzs Hl Hl2  Hγ]" ) as "_".
+  {
+    iNext. iExists hd, td, l, d, lv, ys, zs, xs0. iFrame. 
+  }
+  iModIntro.
+  wp_let.
+  wp_pures.
+  wp_bind(! #(td +ₗ 1))%E.
+  iInv "Hinv" as (hd' td' l' d' lv' ys' zs' xs0') "(Hhead & Htail & Hys & Hzs & Hl & Hl2 & >Hdxs & Hγ)" "Hiclose".
 
+  iMod ("Hiclose" with "[Hhead Htail Hys Hdxs Hzs Hl Hl2 Hγ]" ) as "_".
+  {
+    iNext. iExists hd', td', l', d', lv', ys', zs', xs0'. iFrame. 
+  }
  Admitted.
 
 
