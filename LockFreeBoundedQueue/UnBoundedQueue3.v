@@ -172,6 +172,7 @@ Admitted.
     wp_pures.
     iDestruct "Hn" as "[Hn1 Hn2]".        
     iDestruct "HQ" as "[#Hinv Hfrag]".
+    iLöb as "IH" forall "Hfrag HQV Hn1 Hn2". 
     wp_bind(! #tail)%E.
 
     (*loading last*)
@@ -243,6 +244,7 @@ Admitted.
         iDestruct (isList_app with "Hrt4 HLl4") as "Hchain4".
         iDestruct(reach_last with "Hchain4 HR HNl4") as "[HNl4 Hcases]".
         iDestruct "Hcases" as "[%Heq4 | Hnext4]".
+        (*first cmpechg is successful*)
         ++ injection HT13eq as HT13eq.  rewrite <- HT13eq. rewrite Heq4.
         wp_cmpxchg_suc.
 
@@ -314,5 +316,48 @@ Admitted.
       unfold isQueue.
       iFrame. exact.
 
-      ++
-    
+      (*first cmpxchg is not sucessful*)
+      ++injection HT13eq as HT13eq. 
+        rewrite <- HT13eq. 
+        iDestruct "Hnext4" as (n0) "#Hn0".
+        wp_cmpxchg_fail.
+        iMod ("Hclose4" with "[Hhead4 Htail4 HNl4 Hown4]") as "_".
+        { iNext. rewrite /queueInv.
+          iExists hd4, td4, l4, d4, lv4, gone4, ys4, zs4, xs4.
+          iFrame. iFrame "#".
+          iPureIntro. exact.
+        }
+        iModIntro.
+        wp_pures.
+        iApply ("IH" with "Hfrag HQV Hn1 Hn2").
+    - wp_pures.
+      iApply ("IH" with "Hfrag HQV Hn1 Hn2").
+      (*the next of last is not null, it means that another cell is added to linked list before finilization of current one*)
+    + iDestruct "Hnext" as (n0) "#Hn0".
+      wp_load.
+      iMod ("Hclose2" with "[Hhead2 Htail2 Hl2 Hown2]") as "_".
+        { iNext. rewrite /queueInv.
+          iExists hd2, td2, l2, d2, lv2, gone2, ys2, zs2, xs2.
+          iFrame. iFrame "#".
+          iPureIntro. exact.
+        }
+        iModIntro.
+
+     wp_let.
+     wp_bind(! #tail)%E.
+     iInv "Hinv" as (hd3 td3 l3 d3 lv3 gone3 ys3 zs3 xs3)
+    "(>Hhead3 & >Htail3 & >#HLt3 & >#HLl3 & >#Hgone3 & >#Hlast3 & >HNl3 & >%Hdx3 & >Hown3)" "Hclose3".
+    wp_load.
+    iMod ("Hclose3" with "[Hhead3 Htail3 HNl3 Hown3]") as "_".
+        { iNext. rewrite /queueInv.
+          iExists hd3, td3, l3, d3, lv3, gone3, ys3, zs3, xs3.
+          iFrame. iFrame "#".
+          iPureIntro. exact.
+        }
+    iModIntro.
+    wp_pures.
+    case_bool_decide as Heq13.
+    wp_pures.
+      ++ wp_bind(#tail).
+
+
