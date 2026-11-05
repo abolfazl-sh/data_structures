@@ -283,7 +283,7 @@ Admitted.
     wp_cmpxchg as Hne | Heq'.
       -- injection Hne as Hne. subst td5.
        destruct zs5 as [|z zs'].
-    +++ simpl. iDestruct "HLl5" as %Heq5. subst l5.
+    +++ iDestruct "HLl5" as %Heq5. subst l5.
       iDestruct (pointsto_agree with "HNl5 HNl4") as %Hag.
       simplify_eq.
     +++ simpl. iDestruct "HLl5" as (m) "(Hz & Hzn & Hrest)".
@@ -358,6 +358,38 @@ Admitted.
     wp_pures.
     case_bool_decide as Heq13.
     wp_pures.
-      ++ wp_bind(#tail).
+      ++ wp_bind(CmpXchg #tail #td1 #n0).
+        iInv "Hinv" as (hd4 td4 l4 d4 lv4 gone4 ys4 zs4 xs4)
+        "(>Hhead4 & >Htail4 & >#HLt4 & >#HLl4 & >#Hgone4 & >#Hlast4 & >HNl4 & >%Hdx4 & >Hown4)" "Hclose4".
+        wp_cmpxchg as Htd41eq | Htd41neq.
+          --injection Htd41eq as Htd41eq. subst td4.   (* now td4 is td1 *)
+            destruct zs4 as [|z zs'].
+            - (* zs4 = []: l4 = td1, so (td1+1) ↦ NONE, contradicting Hn0 *)
+              iDestruct "HLl4" as %->.
+              iDestruct (pointsto_agree with "HNl4 Hn0") as %Hag.
+              simplify_eq.
+            - (* zs4 = z :: zs' *)
+              simpl. iDestruct "HLl4" as (m) "(Hz & Hzn & Hrest)".
+              iDestruct (pointsto_agree with "Hzn Hn0") as %Hag.
+              simplify_eq.                                (* m = n0 *)
+              iMod ("Hclose4" with "[Hhead4 Htail4 HNl4 Hown4]") as "_".
+              { iNext. rewrite /queueInv.
+                iExists hd4, m, l4, d4, lv4, gone4, (ys4 ++ [z]), zs', xs4.
+                iFrame. iFrame "#". iSplit.
+                - iApply (isList_spec with "HLt4 Hz Hzn").
+                - iPureIntro. rewrite Hdx4. by rewrite -!app_assoc. }
+              iModIntro. wp_pures.
+              iApply ("IH" with "Hfrag HQV Hn1 Hn2").
+          --iMod ("Hclose4" with "[Hhead4 Htail4 HNl4 Hown4]") as "_".
+              { iNext. rewrite /queueInv.
+                iExists hd4, td4, l4, d4, lv4, gone4, ys4, zs4, xs4.
+                iFrame. iFrame "#".
+                iPureIntro. exact. }
+            iModIntro.
+            wp_pures.
+            iApply ("IH" with "Hfrag HQV Hn1 Hn2").
+      ++ wp_pures.
+        iApply ("IH" with "Hfrag HQV Hn1 Hn2").
+ Qed.
 
 
