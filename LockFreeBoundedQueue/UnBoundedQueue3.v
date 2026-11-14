@@ -131,10 +131,6 @@ Proof.
   iDestruct "HDN" as "[HDN HDL]". iExists n0. iFrame. iApply (IHys n0 with "HDL HT HTP").
  Qed. 
 
-Lemma nextNode  (td l: loc):
-    ∃ v v', (⌜td = l⌝ ∧ (td +ₗ 1) ↦□ NONEV) ∨ td ↦□ SOMEV(v') -∗ td ↦ SOMEV(v) .
-Admitted.
-
 Definition reach_pre (Φ : prodO locO locO → iProp Σ) :
     prodO locO locO → iProp Σ :=
   λ '(x, z), (⌜x = z⌝ ∨ ∃ y : loc, (x +ₗ 1) ↦□ SOMEV #y ∗ Φ (y, z))%I.
@@ -151,6 +147,10 @@ Lemma reach_last(root td l: loc) ys :
     (l +ₗ 1) ↦ NONEV ∗ ((⌜td = l⌝) ∨ (∃ n, (td +ₗ 1) ↦□ SOMEV #n)).
 Admitted.
 
+Lemma reach_first(root hd: loc) xs ys:
+  isList root hd (xs ++ ys) -∗ ∃ hd':loc, (⌜hd = hd'⌝ ∗ ⌜ys = []⌝ ∗ isList root hd xs) ∨
+    (isList root hd' xs ∗ isList hd' hd ys).
+
 Lemma isList_app (a b c : loc) ys zs :
     isList a b ys -∗ isList b c zs -∗ isList a c (ys ++ zs).
 Admitted.
@@ -158,6 +158,8 @@ Admitted.
 Lemma isList_snoc (a b c : loc) (x : val) (xs : list val) :
   isList a b xs -∗ b ↦□ x -∗ (b +ₗ 1) ↦□ InjRV #c -∗ isList a c (xs ++ [x]).
 Admitted.
+
+
  Lemma queue_spec (v : val) (root head tail : loc) (γ : gname) (xs : list val):
 {{{ isQueue root head tail γ xs }}}
  enq v (#head, #tail)
@@ -167,15 +169,15 @@ Admitted.
     unfold enq.
     wp_pures.
     wp_apply node_spec.
-    {iFrame. }
+    {done. }
     iIntros "%n Hn".
     wp_pures.
     iDestruct "Hn" as "[Hn1 Hn2]".        
     iDestruct "HQ" as "[#Hinv Hfrag]".
     iLöb as "IH" forall "Hfrag HQV Hn1 Hn2". 
-    wp_bind(! #tail)%E.
-
+    
     (*loading last*)
+    wp_bind(! #tail)%E.
     iInv "Hinv" as (hd1 td1 l1 d1 lv1 gone1 ys1 zs1 xs1) 
     "(>Hhead1 & >Htail1 & >#HLt1 & >#HLl1 & >#Hgone1 & >#Hlast1 & >HNl1 & >%Hdx1 & >Hown1)" "Hclose1".
     wp_load.
@@ -213,8 +215,8 @@ Admitted.
         iFrame. iFrame "#".
         iPureIntro. exact. 
         }
-    iModIntro.
-    wp_let.
+      iModIntro.
+      wp_let.
 
     (*last is equal to tail condition(first condition)*)
     wp_bind(! #tail)%E.
@@ -392,4 +394,44 @@ Admitted.
         iApply ("IH" with "Hfrag HQV Hn1 Hn2").
  Qed.
 
+Lemma deq_spec (v : val) (root head tail : loc) (γ : gname) (xs : list val):
+{{{∃ v, isQueue root head tail γ (xs ++ [v]) }}}
+ deq (#head, #tail)
+{{{RET #(); isQueue root head tail γ xs}}}.
+Proof.
+  iIntros "%φ HQ HQV".
+  unfold deq.
+  iDestruct "HQ" as "[%v0 HQ]".
+  iDestruct "HQ" as "[#Hinv Hγ]".
+  wp_pures.
+  iLöb as "IH" forall "Hγ HQV".
+  wp_bind(! #head)%E.
+  iInv "Hinv" as (hd1 td1 l1 d1 lv1 gone1 ys1 zs1 xs1) 
+  "(>Hhead1 & >Htail1 & >#HLt1 & >#HLl1 & >#Hgone1 & >#Hlast1 & >HNl1 & >%Hdx1 & >Hown1)" "Hclose1".
+  wp_load.
+  iMod("Hclose1" with "[Hhead1 Htail1 HNl1 Hown1]") as "_" .
+  {
+    iNext. rewrite /queueInv.
+    iExists hd1, td1, l1, d1, lv1, gone1, ys1, zs1, xs1.
+    iFrame. iFrame "#".
+    iPureIntro. exact.
+  }
+  iModIntro.
+  wp_let.
+  wp_bind(! #tail)%E.
+  iInv "Hinv" as (hd2 td2 l2 d2 lv2 gone2 ys2 zs2 xs2)
+  "(>Hhead2 & >Htail2 & >#HLt2 & >#HLl2 & >#Hgone2 & >#Hlast2 & >HNl2 & >%Hdx2 & >Hown2)" "Hclose2".
+  iDestruct(isList_app with "Hgone2 HLt2") as "#Hpre".
+  wp_load.
+  iMod("Hclose2" with "[Hhead2 Htail2 HNl2 Hown2]") as "_".
+  {
+    iNext; rewrite/queueInv.
+    iExists hd2, td2, l2, d2, lv2, gone2, ys2, zs2, xs2.
+    iFrame. iFrame "#".
+    iPureIntro. exact.
+  }
+  iModIntro.
+  wp_let.
+  wp_pures.
+  wp_bind(! #(hd1 +ₗ 1))%E.
 
