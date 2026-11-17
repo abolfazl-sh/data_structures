@@ -1057,11 +1057,11 @@ As with enqueue:
 *)
 Lemma deq_spec (v : val) (root head tail : loc) (γ : gname) (xs : list val):
 
-{{{∃ v, isQueue root head tail γ (xs ++ [v]) }}}
+{{{ isQueue root head tail γ ([v] ++ xs) }}}
 
  deq (#head, #tail)
 
-{{{RET #(); isQueue root head tail γ xs}}}.
+{{{RET v; isQueue root head tail γ xs}}}.
 
 Proof.
 
