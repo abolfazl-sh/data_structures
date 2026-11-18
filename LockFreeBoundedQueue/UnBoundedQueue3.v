@@ -1,19 +1,11 @@
 From iris.heap_lang Require Import lang proofmode notation.
-
 From iris.base_logic.lib Require Export invariants.
-
 From iris.algebra Require Import excl_auth.
-
 From iris.base_logic.lib Require Import own.
-
 From iris.bi.lib Require Import fixpoint_mono.
-
 Section UnboundedQueue.
-
 Context `{!heapGS Σ, !inG Σ (excl_authR (leibnizO (list val)))}.
-
 Let M := nroot .@ "queue".
-
 (*
 English explanation — node
 --------------------------
@@ -22,20 +14,14 @@ This function allocates one Michael–Scott queue node as two consecutive heap c
 - Cell 1 stores the link to the next node.
 The link is initialized to NONE, so a freshly allocated node is initially the last
 node of a linked list.
-
 Operational result: node v returns a location n such that n contains v and n+1
 contains NONE.
 *)
 Definition node : val :=
-
   λ: "value",
-
     let: "cell" := AllocN #2 "value" in
-
     "cell" +ₗ #1 <- NONE;;
-
     "cell".
-
 (*
 English explanation — queue
 ---------------------------
@@ -43,22 +29,15 @@ This creates an empty Michael–Scott queue.
 A dummy/sentinel node n is allocated first. Both head and tail initially point to
 that same node. Therefore the queue contains no user element yet, but it has the
 sentinel node required by the algorithm.
-
 Returned value: a pair (head, tail), where head and tail are references containing
 locations of queue nodes.
 *)
 Definition queue : val :=
-
   λ: <>,
-
     let: "n" := node #0 in
-
     let: "head" := ref "n" in
-
     let: "tail" := ref "n" in
-
     ("head", "tail").
-
 (*
 English explanation — isList
 ----------------------------
@@ -66,20 +45,14 @@ isList from to ys is the logical description of a linked-list segment.
 - If ys = [], then the segment contains no nodes, so from = to.
 - If ys = y :: ys', then `from` stores y, the next-field at from+1 points to some
   node n, and the rest of the segment from n to `to` represents ys'.
-
 The points-to assertions are persistent/read-only (↦□). This lets the proof keep
 knowledge about already-linked nodes even after closing the queue invariant.
 *)
 Fixpoint isList (from to : loc) (ys : list val) : iProp Σ :=
-
   match ys with
-
   | [] => ⌜from = to⌝
-
   | y :: ys => ∃ n : loc, from ↦□ y ∗ (from +ₗ 1) ↦□ SOMEV #n ∗ isList n to ys
-
   end.
-
 (*
 English explanation — isList_timeless
 --------------------------------------
@@ -88,15 +61,10 @@ be used across the later modality in the standard way needed when opening/closin
 invariants. The proof is structural induction on the represented list.
 *)
 Global Instance isList_timeless from to ys : Timeless (isList from to ys).
-
 Proof.
-
   revert from.
-
   induction ys as [|y ys IH]; intros from; simpl; apply _.
-
 Qed.
-
 (*
 English explanation — isList_persistent
 ----------------------------------------
@@ -105,21 +73,15 @@ contains only persistent points-to facts and pure equalities, so it may safely b
 copied/reused by the proof.
 *)
 Global Instance isList_persistent from to ys : Persistent (isList from to ys).
-
 Proof.
-
   revert from.
-
   induction ys as [|y ys IH]; intros from; simpl; apply _.
-
 Qed.
-
 (*
 English explanation — queueInv
 ------------------------------
 This is the central invariant describing the concrete heap representation of the
 Michael–Scott queue and its abstract logical contents.
-
 Important pieces:
 - `head ↦ #hd` and `tail ↦ #td` are the current concrete head/tail pointers.
 - `isList hd td ys` describes the segment from head to tail.
@@ -132,30 +94,19 @@ Important pieces:
 - `d :: xs = ys ++ zs ++ [lv]` connects the concrete linked structure with the
   abstract queue contents. `d` is the dummy/front value not returned to clients.
 - `own γ (●E xs)` is the authoritative ghost state for the abstract queue contents.
-
 The invariant therefore allows head and tail to lag in ways permitted by the
 lock-free algorithm while still tying every concrete state to one abstract list.
 *)
 Definition queueInv (root head tail: loc) (γ: gname) : iProp Σ :=
-
   ∃ (hd td l: loc) (d lv : val) (gone ys zs xs : list val),
-
     head ↦ #hd ∗ tail ↦ #td ∗
-
     isList hd td ys ∗
-
     isList td l zs ∗
-
     isList root hd gone ∗
-
     l ↦□ lv ∗
-
     (l +ₗ 1) ↦ NONEV ∗
-
     ⌜d :: xs = ys ++ zs ++ [lv]⌝ ∗
-
     own γ (●E (xs : leibnizO (list val))).
-
 (*
 English explanation — isQueue
 -----------------------------
@@ -164,15 +115,12 @@ It combines:
 1. the shared invariant `queueInv`, and
 2. a fragment of the ghost state saying that the client-visible abstract contents
    are `xs`.
-
 Agreement between the fragment and the authoritative ghost state inside the
 invariant is what lets enqueue/dequeue proofs connect concrete CAS operations to
 changes of the abstract list.
 *)
 Definition isQueue (root head tail : loc) (γ : gname) (xs : list val) : iProp Σ :=
-
   inv M (queueInv root head tail γ) ∗ own γ (◯E (xs : leibnizO (list val))).
-
 (*
 English explanation — enq
 -------------------------
@@ -191,41 +139,23 @@ Program-line structure:
 8. If tail changed during validation, retry.
 *)
 Definition enq : val :=
-
   λ: "value" "queue",
-
     let: "n" := node "value" in
-
     let: "tail" := Snd "queue" in
-
     (rec: "insert" <> :=
-
        let: "last" := !"tail" in
-
        let: "next" := !("last" +ₗ #1) in
-
        if: "last" = !"tail" then
-
          match: "next" with
-
            NONE =>
-
              if: CAS ("last" +ₗ #1) "next" (SOME "n") then
-
                CAS "tail" "last" "n";; #()
-
              else "insert" #()
-
          | SOME "l" =>
-
              CAS "tail" "last" "l";;
-
              "insert" #()
-
          end
-
        else "insert" #()) #().
-
 (*
 English explanation — deq
 -------------------------
@@ -242,51 +172,29 @@ Program-line structure:
 6. If the CAS fails, another thread changed head, so retry.
 *)
 Definition deq : val :=
-
   rec: "deq" "queue" :=
-
     let: "head" := Fst "queue" in
-
     let: "tail" := Snd "queue" in
-
     let: "first" := !"head" in
-
     let: "last" := !"tail" in
-    
+    let: "p" := NewProph in
     let: "next" := !("first" +ₗ #1) in
-
-    if: "first" = !"head" then
-
+    if: "first" = Resolve(!"head") "p" #() then
       if: "first" = "last" then
-
         match: "next" with
-
           NONE => NONE
-
         | SOME "n" =>
-
             CAS "tail" "last" "n";;
-
             "deq" "queue"
-
         end
-
       else
-
         match: "next" with
-
           NONE => "deq" "queue"
-
         | SOME "n" =>
-
             let: "v" := !"n" in
-
             if: CAS "head" "first" "n" then SOME "v" else "deq" "queue"
-
         end
-
     else "deq" "queue".
-
 (*
 English explanation — node_spec
 -------------------------------
@@ -299,45 +207,25 @@ The proof allocates two cells, splits the array ownership, stores NONE in the ne
 field, and returns both points-to resources.
 *)
 Lemma node_spec (v : val) :
-
   {{{ True }}}
-
     node v
-
   {{{ (n : loc), RET #n; n ↦ v ∗ (n +ₗ 1) ↦ NONEV }}}.
-
 Proof.
-
     iIntros  "%φ %H Hn".
-
     wp_rec.
-
     wp_alloc l as "Hl".
-
     - reflexivity.
-
     - wp_let.
-
     wp_pures.
-
     simpl.
-
     iDestruct (array_cons with "Hl") as "[Hl0 Hl1]".
-
     iEval (rewrite array_singleton) in "Hl1".
-
     wp_store.
-
     iApply "Hn".
-
     iModIntro.
-
     iFrame.
-
 Qed.
-
 Set Printing Depth 1000.
-
 (*
 English explanation — isList_spec
 ---------------------------------
@@ -351,27 +239,16 @@ Result:
 The induction walks to the end of the old segment and appends the final node.
 *)
 Lemma isList_spec (hd td n: loc) ys v' :
-
   isList hd td ys -∗ td ↦□ v'  -∗ (td +ₗ 1) ↦□ SOMEV #n -∗
-
   isList hd n (ys ++ [v']).
-
 Proof.
-
   induction ys in hd |- *.
-
-  -iIntros "HL HT HTP". simpl.
-
+  - iIntros "HL HT HTP". simpl.
   iExists n. iDestruct "HL" as %Heq. rewrite Heq. iFrame. iPureIntro. reflexivity.
-
-  -iIntros "HL HT HTP". simpl.
-
+  - iIntros "HL HT HTP". simpl.
   iDestruct "HL" as (n0) "[HD HDN]". iFrame.
-
   iDestruct "HDN" as "[HDN HDL]". iExists n0. iFrame. iApply (IHys n0 with "HDL HT HTP").
-
 Qed.
-
 (*
 English explanation — reach_pre
 -------------------------------
@@ -380,11 +257,8 @@ A pair (x,z) is reachable if either x = z, or x.next points to some y and y can
 reach z according to Φ.
 *)
 Definition reach_pre (Φ : prodO locO locO → iProp Σ) :
-
     prodO locO locO → iProp Σ :=
-
   λ '(x, z), (⌜x = z⌝ ∨ ∃ y : loc, (x +ₗ 1) ↦□ SOMEV #y ∗ Φ (y, z))%I.
-
 (*
 English explanation — Reach
 ---------------------------
@@ -393,9 +267,7 @@ by reach_pre. It says that by repeatedly following next pointers from x, one can
 arrive at z.
 *)
 Definition Reach (x z : loc) : iProp Σ :=
-
   bi_least_fixpoint reach_pre (x, z).
-
 (*
 English explanation — isList_Reach
 ----------------------------------
@@ -404,11 +276,8 @@ the weaker fact `Reach hd td`. The element values are forgotten; only existence 
 a next-pointer path is retained.
 *)
 Lemma isList_Reach(hd td : loc) ys :
-
   isList hd td ys -∗ Reach hd td.
-
 Admitted.
-
 (*
 English explanation — reach_last
 --------------------------------
@@ -420,13 +289,9 @@ This is useful when deciding whether a previously read tail is at the true end o
 is lagging behind an already-linked node.
 *)
 Lemma reach_last(root td l: loc) ys :
-
     isList root l ys -∗ Reach root td -∗ (l +ₗ 1) ↦ NONEV -∗
-
     (l +ₗ 1) ↦ NONEV ∗ ((⌜td = l⌝) ∨ (∃ n, (td +ₗ 1) ↦□ SOMEV #n)).
-
 Admitted.
-
 (*
 English explanation — reach_first
 ---------------------------------
@@ -436,12 +301,10 @@ hd' coincides with hd, or the original segment splits into root--hd' representin
 xs and hd'--hd representing ys.
 *)
 Lemma reach_first(root hd: loc) xs ys:
-
-  isList root hd (xs ++ ys) -∗ 
-
+  isList root hd (xs ++ ys) -∗
     ∃ hd':loc, (⌜hd = hd'⌝ ∗ ⌜ys = []⌝ ∗ isList root hd xs) ∨
     (isList root hd' xs ∗ isList hd' hd ys).
-
+Admitted.
 (*
 English explanation — isList_app
 --------------------------------
@@ -449,11 +312,8 @@ This is concatenation for logical list segments. If a--b represents ys and b--c
 represents zs, then a--c represents ys ++ zs.
 *)
 Lemma isList_app (a b c : loc) ys zs :
-
     isList a b ys -∗ isList b c zs -∗ isList a c (ys ++ zs).
-
 Admitted.
-
 (*
 English explanation — isList_snoc
 ---------------------------------
@@ -462,39 +322,27 @@ b.next points to c, then a--c represents xs ++ [x]. It is used after enqueue has
 successfully changed the old last node's next field to point at the new node.
 *)
 Lemma isList_snoc (a b c : loc) (x : val) (xs : list val) :
-
   isList a b xs -∗ b ↦□ x -∗ (b +ₗ 1) ↦□ InjRV #c -∗ isList a c (xs ++ [x]).
-
 Admitted.
-
 (*
 Proof guide — queue_spec / enqueue
 ==================================
 Specification goal:
   Starting from isQueue ... xs, `enq v` returns unit and establishes
   isQueue ... (xs ++ [v]).
-
 The comments below are grouped by actual program actions. For each action:
 - PRE: facts/resources that must be available before proving that line.
 - ACTION: the concrete HeapLang operation being verified.
 - POST: what the proof knows/needs after that line.
 *)
 Lemma queue_spec (v : val) (root head tail : loc) (γ : gname) (xs : list val):
-
 {{{ isQueue root head tail γ xs }}}
-
  enq v (#head, #tail)
-
  {{{RET #(); isQueue root head tail γ (xs ++ [v])}}}.
-
 Proof.
-
     iIntros "%φ HQ HQV".
-
     unfold enq.
-
     wp_pures.
-
 (*
 PROGRAM LINE: let: "n" := node "value" in
 PRE:
@@ -507,17 +355,11 @@ POST:
 - These resources are kept private until the successful linking CAS.
 *)
     wp_apply node_spec.
-
     {done. }
-
     iIntros "%n Hn".
-
     wp_pures.
-
     iDestruct "Hn" as "[Hn1 Hn2]".
-
     iDestruct "HQ" as "[#Hinv Hfrag]".
-
 (*
 PROGRAM STRUCTURE: recursive `insert` loop
 PRE:
@@ -531,7 +373,6 @@ POST:
   needed for another iteration.
 *)
     iLöb as "IH" forall "Hfrag HQV Hn1 Hn2".
-
 (*
 PROGRAM LINE: let: "last" := !"tail" in
 PRE:
@@ -546,35 +387,20 @@ POST:
 - Close the invariant unchanged.
 *)
     (*loading last*)
-
     wp_bind(! #tail)%E.
-
     iInv "Hinv" as (hd1 td1 l1 d1 lv1 gone1 ys1 zs1 xs1)
-
     "(>Hhead1 & >Htail1 & >#HLt1 & >#HLl1 & >#Hgone1 & >#Hlast1 & >HNl1 & >%Hdx1 & >Hown1)" "Hclose1".
-
     wp_load.
-
     iDestruct (isList_app with "Hgone1 HLt1") as "#Hpre".
-
     iMod ("Hclose1" with "[Hhead1 Htail1 HNl1 Hown1]") as "_".
-
     {
-
      iNext. rewrite /queueInv.
-
      iExists hd1, td1, l1,  d1, lv1, gone1, ys1, zs1, xs1.
-
      iFrame.
-
      iFrame "#".
-
      iPureIntro. exact.
-
     }
-
     iModIntro.
-
 (*
 PROGRAM LINE: let: "next" := !("last" +ₗ #1) in
 PRE:
@@ -591,51 +417,28 @@ POST:
 These are exactly the two algorithmic branches for `next`.
 *)
     (*loading the next of the last*)
-
     wp_let.
-
     wp_pures.
-
     wp_bind(! #(td1 +ₗ 1))%E.
-
         iInv "Hinv" as (hd2 td2 l2 d2 lv2 gone2 ys2 zs2 xs2)
-
     "(>Hhead2 & >Htail2 & >#HLt2 & >#HLl2 & >#Hgone2 & >#Hlast2 & >HNl2 & >%Hdx2 & >Hown2)" "Hclose2".
-
     iDestruct(isList_app with "Hgone2 HLt2") as "HRT".
-
     iDestruct(isList_app with "HRT HLl2") as "Hchain".
-
     iDestruct(isList_Reach with "Hpre") as "#HR".
-
     iDestruct(reach_last with "Hchain HR HNl2") as "[Hl2 Hcases]".
-
     iDestruct "Hcases" as "[%Heq | Hnext]".
-
     + rewrite Heq.
-
       wp_load.
-
       iMod ("Hclose2" with "[Hhead2 Htail2 Hl2 Hown2]") as "_".
-
         {
-
         iNext. rewrite /queueInv.
-
         iExists hd2, td2, l2,  d2, lv2, gone2, ys2, zs2, xs2.
-
         rewrite <- Heq.
-
         iFrame. iFrame "#".
-
         iPureIntro. exact.
-
         }
-
       iModIntro.
-
       wp_let.
-
 (*
 PROGRAM LINE: if: "last" = !"tail" then ... else retry
 PRE:
@@ -649,43 +452,24 @@ POST:
   iteration, so invoke IH and retry with the same ghost fragment/new node.
 *)
     (*last is equal to tail condition(first condition)*)
-
     wp_bind(! #tail)%E.
-
     iInv "Hinv" as (hd3 td3 l3 d3 lv3 gone3 ys3 zs3 xs3)
-
         "(>Hhead3 & >Htail3 & >#HLt3 & >#HLl3 & >#Hgone3 & >#Hlast3 & >HNl3 & >%Hdx3 & >Hown3)" "Hclose3".
-
     wp_load.
-
     iMod ("Hclose3" with "[Hhead3 Htail3 HNl3 Hown3]") as "_".
-
       {
-
       iNext. rewrite /queueInv.
-
       iExists hd3, td3, l3,  d3, lv3, gone3, ys3, zs3, xs3.
-
       rewrite <- Heq.
-
       iFrame. iFrame "#".
-
       iPureIntro. exact.
-
       }
-
     iModIntro.
-
     wp_op.
-
     case_bool_decide as HT13eq.
-
       (*if "last" = !"tail"*)
-
       - rewrite HT13eq.
-
         wp_pures.
-
 (*
 PROGRAM LINE: CAS ("last" +ₗ #1) "next" (SOME "n")
 This is the important enqueue CAS.
@@ -706,27 +490,16 @@ POST ON FAILURE:
   closed unchanged and the loop retries; our node n is still private and reusable.
 *)
         (*first CAS (the case will be sucessful)*)
-
         wp_bind(CmpXchg #(td3 +ₗ 1) (InjLV #()) (InjRV #n))%E.
-
         iInv "Hinv" as (hd4 td4 l4 d4 lv4 gone4 ys4 zs4 xs4)
-
         "(>Hhead4 & >Htail4 & >#HLt4 & >#HLl4 & >#Hgone4 & >#Hlast4 & >HNl4 & >%Hdx4 & >Hown4)" "Hclose4".
-
         iDestruct (isList_app with "Hgone4 HLt4") as "Hrt4".
-
         iDestruct (isList_app with "Hrt4 HLl4") as "Hchain4".
-
         iDestruct(reach_last with "Hchain4 HR HNl4") as "[HNl4 Hcases]".
-
         iDestruct "Hcases" as "[%Heq4 | Hnext4]".
-
         (*first cmpechg is successful*)
-
         ++ injection HT13eq as HT13eq.  rewrite <- HT13eq. rewrite Heq4.
-
         wp_cmpxchg_suc.
-
 (*
 ABSTRACT UPDATE AFTER THE SUCCESSFUL LINKING CAS
 PRE:
@@ -742,55 +515,30 @@ POST:
   consistently with the newly linked node.
 *)
         (*update invariant*)
-
         iDestruct (own_valid_2 with "Hown4 Hfrag") as %Hag.
-
         apply excl_auth_agree_L in Hag. subst xs4.
-
         iCombine "Hown4 Hfrag" as "Hγ".
-
         iMod (own_update γ _
-
                 ((●E (xs ++ [v] : leibnizO (list val))) ⋅ (◯E (xs ++ [v] : leibnizO (list val))))
-
                 with "Hγ") as "Hγ".
-
         { apply excl_auth_update. }
-
         rewrite own_op.
-
         iDestruct "Hγ" as "[Hown4 Hfrag]".
-
         iMod (pointsto_persist with "Hn1") as "#Hn1".
-
         iMod (pointsto_persist with "HNl4") as "#HNl4".
-
         iMod ("Hclose4" with "[Hhead4 Htail4 Hn2 Hown4]") as "_".
-
         { iNext. rewrite /queueInv.
-
           iExists hd4, td4, n, d4, v, gone4, ys4, (zs4 ++ [lv4]), (xs ++ [v]).
-
           iFrame.
-
           iFrame "#".
-
         iSplit.
-
         - iApply (isList_snoc with "HLl4 Hlast4 HNl4").
-
         - iPureIntro.
-
           replace (d4 :: xs ++ [v]) with ((d4 :: xs) ++ [v]) by reflexivity.
-
           rewrite Hdx4.
-
           by rewrite -!app_assoc. }
-
     iModIntro.
-
     wp_pures.
-
 (*
 PROGRAM LINE: CAS "tail" "last" "n";; #()
 PRE:
@@ -806,109 +554,57 @@ POST IF CAS FAILS:
   success anyway, because the first CAS already inserted v.
 *)
     (*second CAS (the sucess case)*)
-
     wp_bind(CmpXchg #tail #l4 #n).
-
     iInv "Hinv" as (hd5 td5 l5 d5 lv5 gone5 ys5 zs5 xs5)
-
     "(>Hhead5 & >Htail5 & >#HLt5 & >#HLl5 & >#Hgone5 & >#Hlast5 & >HNl5 & >%Hdx5 & >Hown5)" "Hclose5".
-
     wp_cmpxchg as Hne | Heq'.
-
       -- injection Hne as Hne. subst td5.
-
        destruct zs5 as [|z zs'].
-
     +++ iDestruct "HLl5" as %Heq5. subst l5.
-
       iDestruct (pointsto_agree with "HNl5 HNl4") as %Hag.
-
       simplify_eq.
-
     +++ simpl. iDestruct "HLl5" as (m) "(Hz & Hzn & Hrest)".
-
       iDestruct (pointsto_agree with "Hzn HNl4") as %Hag.
-
       simplify_eq.                      (* m = n *)
-
       iMod ("Hclose5" with "[Hhead5 Htail5 HNl5 Hown5]") as "_".
-
       { iNext. rewrite /queueInv.
-
         iExists hd5, n, l5, d5, lv5, gone5, (ys5 ++ [z]), zs', xs5.
-
         iFrame. iFrame "#".
-
         iSplit.
-
         - iApply (isList_spec with "HLt5 Hz Hzn").
-
         - iPureIntro. rewrite Hdx5. by rewrite -!app_assoc. }
-
     iModIntro.
-
     wp_pures.
-
     iApply "HQV".
-
     unfold isQueue. iFrame. iFrame "#". done.
-
     -- (*second CAS is failed*)
-
       iMod ("Hclose5" with "[Hhead5 Htail5 HNl5 Hown5]") as "_".
-
       { iNext. rewrite /queueInv.
-
         iExists hd5, td5, l5, d5, lv5, gone5, ys5, zs5, xs5.
-
         iFrame. iFrame "#".
-
         iPureIntro. exact.
-
       }
-
       iModIntro.
-
       wp_pures.
-
       iApply "HQV".
-
       unfold isQueue.
-
       iFrame. exact.
-
       (*first cmpxchg is not sucessful*)
-
-      ++injection HT13eq as HT13eq.
-
+      ++ injection HT13eq as HT13eq.
         rewrite <- HT13eq.
-
         iDestruct "Hnext4" as (n0) "#Hn0".
-
         wp_cmpxchg_fail.
-
         iMod ("Hclose4" with "[Hhead4 Htail4 HNl4 Hown4]") as "_".
-
         { iNext. rewrite /queueInv.
-
           iExists hd4, td4, l4, d4, lv4, gone4, ys4, zs4, xs4.
-
           iFrame. iFrame "#".
-
           iPureIntro. exact.
-
         }
-
         iModIntro.
-
         wp_pures.
-
         iApply ("IH" with "Hfrag HQV Hn1 Hn2").
-
     - wp_pures.
-
       iApply ("IH" with "Hfrag HQV Hn1 Hn2").
-
 (*
 PROGRAM BRANCH: match next with SOME "l"
 PRE:
@@ -925,154 +621,92 @@ POST:
   private new node n.
 *)
       (*the next of last is not null, it means that another cell is added to linked list before finilization of current one*)
-
     + iDestruct "Hnext" as (n0) "#Hn0".
-
       wp_load.
-
       iMod ("Hclose2" with "[Hhead2 Htail2 Hl2 Hown2]") as "_".
-
         { iNext. rewrite /queueInv.
-
           iExists hd2, td2, l2, d2, lv2, gone2, ys2, zs2, xs2.
-
           iFrame. iFrame "#".
-
           iPureIntro. exact.
-
         }
-
         iModIntro.
-
      wp_let.
-
      wp_bind(! #tail)%E.
-
      iInv "Hinv" as (hd3 td3 l3 d3 lv3 gone3 ys3 zs3 xs3)
-
     "(>Hhead3 & >Htail3 & >#HLt3 & >#HLl3 & >#Hgone3 & >#Hlast3 & >HNl3 & >%Hdx3 & >Hown3)" "Hclose3".
-
     wp_load.
-
     iMod ("Hclose3" with "[Hhead3 Htail3 HNl3 Hown3]") as "_".
-
         { iNext. rewrite /queueInv.
-
           iExists hd3, td3, l3, d3, lv3, gone3, ys3, zs3, xs3.
-
           iFrame. iFrame "#".
-
           iPureIntro. exact.
-
         }
-
     iModIntro.
-
     wp_pures.
-
     case_bool_decide as Heq13.
-
     wp_pures.
-
       ++ wp_bind(CmpXchg #tail #td1 #n0).
-
         iInv "Hinv" as (hd4 td4 l4 d4 lv4 gone4 ys4 zs4 xs4)
-
         "(>Hhead4 & >Htail4 & >#HLt4 & >#HLl4 & >#Hgone4 & >#Hlast4 & >HNl4 & >%Hdx4 & >Hown4)" "Hclose4".
-
         wp_cmpxchg as Htd41eq | Htd41neq.
-
-          --injection Htd41eq as Htd41eq. subst td4.   (* now td4 is td1 *)
-
+          -- injection Htd41eq as Htd41eq. subst td4.   (* now td4 is td1 *)
             destruct zs4 as [|z zs'].
-
             - (* zs4 = []: l4 = td1, so (td1+1) ↦ NONE, contradicting Hn0 *)
-
               iDestruct "HLl4" as %->.
-
               iDestruct (pointsto_agree with "HNl4 Hn0") as %Hag.
-
               simplify_eq.
-
             - (* zs4 = z :: zs' *)
-
               simpl. iDestruct "HLl4" as (m) "(Hz & Hzn & Hrest)".
-
               iDestruct (pointsto_agree with "Hzn Hn0") as %Hag.
-
               simplify_eq.                                (* m = n0 *)
-
               iMod ("Hclose4" with "[Hhead4 Htail4 HNl4 Hown4]") as "_".
-
               { iNext. rewrite /queueInv.
-
                 iExists hd4, m, l4, d4, lv4, gone4, (ys4 ++ [z]), zs', xs4.
-
                 iFrame. iFrame "#". iSplit.
-
                 - iApply (isList_spec with "HLt4 Hz Hzn").
-
                 - iPureIntro. rewrite Hdx4. by rewrite -!app_assoc. }
-
               iModIntro. wp_pures.
-
               iApply ("IH" with "Hfrag HQV Hn1 Hn2").
-
-          --iMod ("Hclose4" with "[Hhead4 Htail4 HNl4 Hown4]") as "_".
-
+          -- iMod ("Hclose4" with "[Hhead4 Htail4 HNl4 Hown4]") as "_".
               { iNext. rewrite /queueInv.
-
                 iExists hd4, td4, l4, d4, lv4, gone4, ys4, zs4, xs4.
-
                 iFrame. iFrame "#".
-
                 iPureIntro. exact. }
-
             iModIntro.
-
             wp_pures.
-
             iApply ("IH" with "Hfrag HQV Hn1 Hn2").
-
       ++ wp_pures.
-
         iApply ("IH" with "Hfrag HQV Hn1 Hn2").
-
 Qed.
-
 (*
 Proof guide — deq_spec / dequeue
 ================================
 The supplied specification assumes there exists a value v such that the current
 abstract queue is xs ++ [v], and aims to finish with abstract xs.
-
 NOTE: the uploaded proof is incomplete and stops while beginning the proof of the
 program line `let: "next" := !("first" +ₗ #1) in`. The comments below explain only
 the proof steps actually present; no missing proof code is added.
-
 As with enqueue:
 - PRE = what must be known before an actual program line.
 - ACTION = what the program does.
 - POST = what should be available after proving that line.
 *)
-Lemma deq_spec (v : val) (root head tail : loc) (γ : gname) (xs : list val):
-
-{{{ isQueue root head tail γ ([v] ++ xs) }}}
-
- deq (#head, #tail)
-
-{{{RET SOMEV (v); isQueue root head tail γ xs}}}.
-
-Proof.
-
+(*todo: need to be updated*)
+Lemma deq_spec (root head tail : loc) (γ : gname)
+    (P : iProp Σ) (Q : val → iProp Σ) :
+  {{{ inv M (queueInv root head tail γ) ∗ P ∗
+      □ (∀ xs : list val,
+           (own γ (●E (xs : leibnizO (list val))) ∗ P)
+             ={⊤ ∖ ↑M}=∗
+           ▷ ( (⌜xs = []⌝ ∗ own γ (●E (xs : leibnizO (list val))) ∗ Q NONEV)
+             ∨ (∃ (v : val) (xs' : list val),
+                  ⌜xs = v :: xs'⌝ ∗ own γ (●E (xs' : leibnizO (list val))) ∗ Q (SOMEV v)) )) }}}
+    deq (#head, #tail)
+  {{{ w, RET w; Q w }}}.
   iIntros "%φ HQ HQV".
-
   unfold deq.
-
   wp_pures.
-
-  iDestruct "HQ" as "[#Hinv Hγ]".
-
+  iDestruct "HQ" as "[#Hinv [HP #Hsnap]]".
 (*
 PROGRAM STRUCTURE: recursive `deq` retry loop
 PRE:
@@ -1083,8 +717,7 @@ ACTION:
 POST:
 - IH can restart dequeue while carrying the ghost fragment and final continuation.
 *)
-  iLöb as "IH" forall "Hγ HQV".
-
+  iLöb as "IH" forall "HP HQV".
 (*
 PROGRAM LINE: let: "first" := !"head" in
 PRE:
@@ -1096,31 +729,18 @@ POST:
 - The invariant is restored unchanged because a load does not modify the queue.
 *)
   wp_bind(! #head)%E.
-
   iInv "Hinv" as (hd1 td1 l1 d1 lv1 gone1 ys1 zs1 xs1)
-
   "(>Hhead1 & >Htail1 & >#HLt1 & >#HLl1 & >#Hgone1 & >#Hlast1 & >HNl1 & >%Hdx1 & >Hown1)" "Hclose1".
-
   wp_load.
-
   iMod("Hclose1" with "[Hhead1 Htail1 HNl1 Hown1]") as "_" .
-
   {
-
     iNext. rewrite /queueInv.
-
     iExists hd1, td1, l1, d1, lv1, gone1, ys1, zs1, xs1.
-
     iFrame. iFrame "#".
-
     iPureIntro. exact.
-
   }
-
   iModIntro.
-
   wp_let.
-
 (*
 PROGRAM LINE: let: "last" := !"tail" in
 PRE:
@@ -1135,35 +755,20 @@ POST:
 - Close the invariant unchanged.
 *)
   wp_bind(! #tail)%E.
-
   iInv "Hinv" as (hd2 td2 l2 d2 lv2 gone2 ys2 zs2 xs2)
-
-  
   "(>Hhead2 & >Htail2 & >#HLt2 & >#HLl2 & >#Hgone2 & >#Hlast2 & >HNl2 & >%Hdx2 & >Hown2)" "Hclose2".
   iDestruct(isList_app with "Hgone2 HLt2") as "#Hpre".
-
   wp_load.
-
   iMod("Hclose2" with "[Hhead2 Htail2 HNl2 Hown2]") as "_".
-
   {
-
     iNext; rewrite/queueInv.
-
     iExists hd2, td2, l2, d2, lv2, gone2, ys2, zs2, xs2.
-
     iFrame. iFrame "#".
-
     iPureIntro. exact.
-
   }
-
   iModIntro.
-
   wp_let.
-
   wp_pures.
-
 (*
 PROGRAM LINE: let: "next" := !("first" +ₗ #1) in
 PRE:
@@ -1173,18 +778,31 @@ PRE:
   next field can be read consistently.
 ACTION:
 - Read the next pointer of the observed first node.
-EXPECTED POST (from the program, although the supplied proof stops here):
+POST:
 - `next` is either NONE or SOME n.
 - The later proof must then re-read head (`if first = !head`) to validate the
   snapshot before using first/next to decide empty, help tail, or CAS head.
-
-The uploaded source ends immediately after the wp_bind below, so there is no proof
-text available to annotate for the remaining deq program lines.
+The new source continues into the invariant/reachability reasoning for this load;
+the comments below explain those additional proof steps without adding missing proof code.
 *)
+  (*
+  PROGRAM LINE: let: "p" := NewProph in
+  PRE:
+  - The proof is about to read first.next and later validate the earlier head snapshot.
+  - Concurrent dequeues may change head between those operations.
+  ACTION:
+  - Allocate a prophecy variable p and obtain Hp, which records the future resolution used by Resolve(!"head") "p" #().
+  POST:
+  - p/Hp can connect the later Resolve operation with the value observed when the head validation is performed.
+  - No concrete queue state or abstract contents have changed yet.
+  *)
+  wp_apply wp_new_proph; first done.
+  iIntros (pvs p) "Hp".
+  wp_let.
+  wp_pures.
   wp_bind(! #(hd1 +ₗ 1))%E.
   iInv "Hinv" as (hd3 td3 l3 d3 lv3 gone3 ys3 zs3 xs3)
     "(>Hhead3 & >Htail3 & >#HLt3 & >#HLl3 & >#Hgone3 & >#Hlast3 & >HNl3 & >%Hdx3 & >Hown3)" "Hclose3".
-
   (*try to do it without the prophecy variable*)
   iDestruct (isList_app with "HLt3 HLl3") as "HLhl3".
   iDestruct (isList_app with "Hgone3 HLhl3") as "HLrl3".
@@ -1202,22 +820,5 @@ text available to annotate for the remaining deq program lines.
   }
   iModIntro.
   wp_let.
-  wp_bind(! #head)%E.
-  iInv "Hinv" as (hd4 td4 l4 d4 lv4 gone4 ys4 zs4 xs4)
-    "(>Hhead4 & >Htail4 & >#HLt4 & >#HLl4 & >#Hgone4 & >#Hlast4 & >HNl4 & >%Hdx4 & >Hown4)" "Hclose4".
-  wp_load.
-  iMod("Hclose4" with "[Hhead4 Htail4 HNl4 Hown4]") as "_".
-  {
-   rewrite /queueInv. iExists hd4, td4, l4, d4, lv4, gone4, ys4, zs4, xs4.
-   iNext.
-   iFrame. iFrame "#".
-   iPureIntro; exact.
-  }
-  iModIntro.
-  wp_pures.
-  case_bool_decide as HCl3hd4eq.
-  - wp_pures.
-  case_bool_decide as HCl3t2eq.
-    ++ wp_pures.
-      iModIntro.
-      (*I tried to do it without the propecy variable, and right now it is the place I stucked. *)
+  (* The uploaded deq proof ends here. Close the unfinished proof without inventing missing proof steps. *)
+Admitted.
