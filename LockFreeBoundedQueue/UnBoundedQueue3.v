@@ -252,7 +252,7 @@ Definition deq : val :=
     let: "first" := !"head" in
 
     let: "last" := !"tail" in
-
+    
     let: "next" := !("first" +ₗ #1) in
 
     if: "first" = !"head" then
@@ -1061,7 +1061,7 @@ Lemma deq_spec (v : val) (root head tail : loc) (γ : gname) (xs : list val):
 
  deq (#head, #tail)
 
-{{{RET v; isQueue root head tail γ xs}}}.
+{{{RET SOMEV (v); isQueue root head tail γ xs}}}.
 
 Proof.
 
@@ -1069,11 +1069,9 @@ Proof.
 
   unfold deq.
 
-  iDestruct "HQ" as "[%v0 HQ]".
+  wp_pures.
 
   iDestruct "HQ" as "[#Hinv Hγ]".
-
-  wp_pures.
 
 (*
 PROGRAM STRUCTURE: recursive `deq` retry loop
@@ -1140,8 +1138,8 @@ POST:
 
   iInv "Hinv" as (hd2 td2 l2 d2 lv2 gone2 ys2 zs2 xs2)
 
+  
   "(>Hhead2 & >Htail2 & >#HLt2 & >#HLl2 & >#Hgone2 & >#Hlast2 & >HNl2 & >%Hdx2 & >Hown2)" "Hclose2".
-
   iDestruct(isList_app with "Hgone2 HLt2") as "#Hpre".
 
   wp_load.
@@ -1184,3 +1182,42 @@ The uploaded source ends immediately after the wp_bind below, so there is no pro
 text available to annotate for the remaining deq program lines.
 *)
   wp_bind(! #(hd1 +ₗ 1))%E.
+  iInv "Hinv" as (hd3 td3 l3 d3 lv3 gone3 ys3 zs3 xs3)
+    "(>Hhead3 & >Htail3 & >#HLt3 & >#HLl3 & >#Hgone3 & >#Hlast3 & >HNl3 & >%Hdx3 & >Hown3)" "Hclose3".
+
+  (*try to do it without the prophecy variable*)
+  iDestruct (isList_app with "HLt3 HLl3") as "HLhl3".
+  iDestruct (isList_app with "Hgone3 HLhl3") as "HLrl3".
+  iDestruct (isList_Reach with "Hgone1") as "#HRhd1".
+  iDestruct (reach_last with "HLrl3 HRhd1 HNl3") as "[HNl3 Hcases]".
+  iDestruct "Hcases" as "[%Hhd | Hnext]".
+  + subst.
+    wp_load.
+  iMod("Hclose3" with "[Hhead3 Htail3 HNl3 Hown3]") as "_".
+  {
+   rewrite /queueInv. iExists hd3, td3, l3, d3, lv3, gone3, ys3, zs3, xs3.
+   iNext.
+   iFrame. iFrame "#".
+   iPureIntro; exact.
+  }
+  iModIntro.
+  wp_let.
+  wp_bind(! #head)%E.
+  iInv "Hinv" as (hd4 td4 l4 d4 lv4 gone4 ys4 zs4 xs4)
+    "(>Hhead4 & >Htail4 & >#HLt4 & >#HLl4 & >#Hgone4 & >#Hlast4 & >HNl4 & >%Hdx4 & >Hown4)" "Hclose4".
+  wp_load.
+  iMod("Hclose4" with "[Hhead4 Htail4 HNl4 Hown4]") as "_".
+  {
+   rewrite /queueInv. iExists hd4, td4, l4, d4, lv4, gone4, ys4, zs4, xs4.
+   iNext.
+   iFrame. iFrame "#".
+   iPureIntro; exact.
+  }
+  iModIntro.
+  wp_pures.
+  case_bool_decide as HCl3hd4eq.
+  - wp_pures.
+  case_bool_decide as HCl3t2eq.
+    ++ wp_pures.
+      iModIntro.
+      (*I tried to do it without the propecy variable, and right now it is the place I stucked. *)
